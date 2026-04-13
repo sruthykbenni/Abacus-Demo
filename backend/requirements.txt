@@ -1,0 +1,13 @@
+flask
+werkzeug
+flask-cors
+opencv-python-headless
+numpy
+scikit-learn
+scikit-image
+matplotlib
+PyMuPDF
+torch
+transformers
+psycopg2-binary
+Pillow
