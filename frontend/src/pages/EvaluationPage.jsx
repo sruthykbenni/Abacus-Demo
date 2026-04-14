@@ -144,6 +144,7 @@ export default function EvaluationPage() {
             <option value="Correct">Correct</option>
             <option value="Wrong">Wrong</option>
             <option value="Unable to read">Unable</option>
+            <option value="Manually corrected">Manually Corrected</option>
           </select>
         </div>
 
@@ -182,10 +183,13 @@ export default function EvaluationPage() {
               className="bg-gray-50 p-5 rounded-xl shadow flex gap-4"
             >
 
-              <img
-                src={`http://localhost:5000${item.image_url}`}
-                className="w-24 h-24 border rounded"
-              />
+              <div className="w-24 h-24 border rounded bg-white flex items-center justify-center overflow-hidden">
+                <img
+                  src={`http://localhost:5000${item.image_url}`}
+                  alt={`Cropped answer for question ${item.question}`}
+                  className="max-w-full max-h-full object-contain"
+                />
+              </div>
 
               <div className="flex-1">
 
