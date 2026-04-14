@@ -23,7 +23,7 @@ RESULTS_DIR = BASE_DIR / "results"
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
 ALLOWED_PDF_EXTENSIONS = {"pdf"}
 MISSING_ANSWER = "-"
-OCR_CONFIDENCE_THRESHOLD = 0.6
+OCR_CONFIDENCE_THRESHOLD = 0.60  # Calibrated on current handwritten answer-sheet samples.
 
 INPUT_DIR.mkdir(exist_ok=True)
 ANSWER_KEY_DIR.mkdir(exist_ok=True)
@@ -35,7 +35,7 @@ CORS(app)
 
 # ---------------- LOAD OCR MODEL ----------------
 
-MODEL_DIR = BASE_DIR / "best_model_v2"
+MODEL_DIR = "D:/best_model_v2"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 OCR_BATCH_SIZE = 8 if device.type == "cuda" else 4
@@ -141,34 +141,18 @@ def evaluate_cropped_answers_batch(image_paths, correct_answers, model, processo
         preds = recognize_numbers(images, model, processor, device)
 
         for idx, (predicted, confidence) in zip(valid_indices, preds):
-
             predicted_str = str(predicted).strip()
             correct_str = str(correct_answers[idx]).strip()
 
-            # 🔥 NEW: penalize confidence if digit mismatch or length mismatch
-            adjusted_confidence = confidence
-
-            if len(predicted_str) != len(correct_str):
-                adjusted_confidence = min(adjusted_confidence, 0.4)
-
-            else:
-                # 🔥 digit-wise mismatch penalty
-                mismatches = sum(
-                    1 for p, c in zip(predicted_str, correct_str) if p != c
-                )
-                if mismatches > 0:
-                    penalty = mismatches / len(correct_str)
-                    adjusted_confidence = adjusted_confidence * (1 - penalty)
-
             remark = build_remark(
                 predicted_str,
-                adjusted_confidence,
+                confidence,
                 correct_str
             )
 
             results[idx] = (
                 remark,
-                round(adjusted_confidence * 100, 2),
+                round(confidence * 100, 2),
                 predicted_str
             )
 

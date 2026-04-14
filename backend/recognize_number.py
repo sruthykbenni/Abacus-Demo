@@ -43,7 +43,7 @@ def recognize_numbers(images, model, processor, device):
 
     Returns:
         list[tuple[predicted_string, confidence_score]]
-        confidence_score is the minimum token probability in the generated sequence.
+        confidence_score is the geometric mean token probability in the generated sequence.
     """
 
     if not images:
@@ -63,9 +63,9 @@ def recognize_numbers(images, model, processor, device):
         )
         if token_id is not None
     }
-    min_confidences = []
+    confidences = []
     for batch_idx in range(sequences.shape[0]):
-        min_confidence = 1.0
+        token_probs = []
         for step in range(sequences.shape[1] - 1):
             if step >= len(outputs.scores):
                 break
@@ -83,21 +83,27 @@ def recognize_numbers(images, model, processor, device):
 
             probs = torch.softmax(outputs.scores[step][beam_row], dim=-1)
             token_prob = probs[token_id].item()
-            min_confidence = min(min_confidence, token_prob)
+            token_probs.append(token_prob)
 
-        min_confidences.append(min_confidence)
+        if token_probs:
+            log_probs = torch.log(torch.tensor(token_probs, dtype=torch.float32))
+            confidence = torch.exp(log_probs.mean()).item()
+        else:
+            confidence = 0.0
+
+        confidences.append(confidence)
 
     raw_predictions = processor.batch_decode(outputs.sequences, skip_special_tokens=True)
 
     results = []
-    for raw_prediction, min_confidence in zip(raw_predictions, min_confidences):
+    for raw_prediction, confidence in zip(raw_predictions, confidences):
         digits = "".join(ch for ch in raw_prediction if ch.isdigit())
         if not digits:
             digits = "?"
-            min_confidence = 0.0
+            confidence = 0.0
 
-        print(f"[OCR] Digits: '{digits}' Confidence: {min_confidence:.2%}")
-        results.append((digits, float(min_confidence)))
+        print(f"[OCR] Digits: '{digits}' Confidence: {confidence:.2%}")
+        results.append((digits, float(confidence)))
 
     return results
 
