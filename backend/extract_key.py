@@ -1,5 +1,10 @@
-import fitz
 import re
+
+import fitz
+
+
+QUESTION_NUMBER_LIMIT = 200
+ROW_TOLERANCE = 2.0
 
 
 def is_arithmetic_progression(nums):
@@ -29,7 +34,7 @@ def extract_numeric_blocks(page):
     numeric_blocks = []
     for block in page.get_text("blocks"):
         nums = list(map(int, re.findall(r"\b\d+\b", block[4])))
-        if len(nums) < 3:
+        if not nums:
             continue
 
         numeric_blocks.append(
@@ -43,8 +48,63 @@ def extract_numeric_blocks(page):
     return numeric_blocks
 
 
-# 🔥 NEW: Detect layout (horizontal vs vertical)
-def detect_layout(blocks):
+def is_question_candidate(nums):
+    if not nums or max(nums) > QUESTION_NUMBER_LIMIT:
+        return False
+
+    if len(nums) == 1:
+        return True
+
+    step = nums[1] - nums[0]
+    if step <= 0:
+        return False
+
+    return all(nums[i + 1] - nums[i] == step for i in range(len(nums) - 1))
+
+
+def contiguous_question_coverage(blocks):
+    if not blocks:
+        return 0
+
+    flat = [num for block in blocks for num in block["nums"]]
+    if not flat or min(flat) != 1 or len(flat) != len(set(flat)):
+        return 0
+
+    unique = sorted(set(flat))
+    expected = list(range(1, unique[-1] + 1))
+    if unique != expected:
+        return 0
+
+    return unique[-1]
+
+
+def extract_question_blocks(blocks):
+    candidate_blocks = [block for block in blocks if is_question_candidate(block["nums"])]
+
+    multi_number_blocks = [block for block in candidate_blocks if len(block["nums"]) >= 2]
+    candidate_sets = [multi_number_blocks, candidate_blocks]
+
+    best_blocks = []
+    best_coverage = 0
+    for block_set in candidate_sets:
+        coverage = contiguous_question_coverage(block_set)
+        if coverage > best_coverage:
+            best_blocks = block_set
+            best_coverage = coverage
+
+    return best_blocks
+
+
+def row_key(y0):
+    return round(y0 / ROW_TOLERANCE) * ROW_TOLERANCE
+
+
+def detect_layout(blocks, question_blocks):
+    if question_blocks and looks_like_question_blocks(question_blocks):
+        if max(len(block["nums"]) for block in question_blocks) <= 3:
+            return "vertical"
+        return "horizontal"
+
     if not blocks:
         return "horizontal"
 
@@ -54,16 +114,45 @@ def detect_layout(blocks):
     x_spread = max(xs) - min(xs)
     y_spread = max(ys) - min(ys)
 
-    # If spread more in x → multiple columns → vertical layout
     return "vertical" if x_spread > y_spread else "horizontal"
 
 
-# 🔥 NEW: Sort blocks based on layout
 def sort_blocks(blocks, layout):
     if layout == "vertical":
-        return sorted(blocks, key=lambda b: (b["x0"], b["y0"]))  # column-wise
-    else:
-        return sorted(blocks, key=lambda b: (b["y0"], b["x0"]))  # row-wise
+        return sorted(blocks, key=lambda b: (b["x0"], b["y0"]))
+    return sorted(blocks, key=lambda b: (b["y0"], b["x0"]))
+
+
+def map_vertical_question_answer_blocks(question_blocks, answer_blocks):
+    questions_by_row = {}
+    answers_by_row = {}
+
+    for block in question_blocks:
+        questions_by_row.setdefault(row_key(block["y0"]), []).append(block)
+
+    for block in answer_blocks:
+        answers_by_row.setdefault(row_key(block["y0"]), []).append(block)
+
+    page_answers = {}
+
+    for y in sorted(set(questions_by_row) & set(answers_by_row)):
+        q_nums = []
+        for block in sorted(questions_by_row[y], key=lambda b: b["x0"]):
+            q_nums.extend(block["nums"])
+
+        q_nums = sorted(q_nums)
+
+        a_nums = []
+        for block in sorted(answers_by_row[y], key=lambda b: b["x0"]):
+            a_nums.extend(block["nums"])
+
+        if len(q_nums) != len(a_nums):
+            continue
+
+        for question, answer in zip(q_nums, a_nums):
+            page_answers[question] = str(answer)
+
+    return page_answers
 
 
 def extract_answer_key(pdf_path):
@@ -83,31 +172,28 @@ def extract_answer_key(pdf_path):
         if not numeric_blocks:
             raise ValueError(f"Page {page_index+1}: No numeric blocks detected")
 
-        question_blocks = [
-            block for block in numeric_blocks if is_arithmetic_progression(block["nums"])
-        ]
-
-        answer_blocks = numeric_blocks
+        question_blocks = extract_question_blocks(numeric_blocks)
+        answer_blocks = [block for block in numeric_blocks if block not in question_blocks]
 
         page_answers = {}
-
-        # 🔥 Detect layout once
-        layout = detect_layout(numeric_blocks)
-
-        # 🔥 Sort based on layout
+        layout = detect_layout(numeric_blocks, question_blocks)
         sorted_blocks = sort_blocks(numeric_blocks, layout)
 
-        # 🔥 CASE 1: Question + Answer structure detected
-        if looks_like_question_blocks(question_blocks):
+        if layout == "vertical" and looks_like_question_blocks(question_blocks):
+            page_answers = map_vertical_question_answer_blocks(
+                question_blocks,
+                answer_blocks,
+            )
 
-            answer_blocks = [
+        if not page_answers and looks_like_question_blocks(question_blocks):
+            filtered_answer_blocks = [
                 block
-                for block in numeric_blocks
-                if not is_arithmetic_progression(block["nums"])
+                for block in answer_blocks
+                if len(block["nums"]) >= 3 and not is_arithmetic_progression(block["nums"])
             ]
 
             question_blocks_sorted = sort_blocks(question_blocks, layout)
-            answer_blocks_sorted = sort_blocks(answer_blocks, layout)
+            answer_blocks_sorted = sort_blocks(filtered_answer_blocks, layout)
 
             if len(question_blocks_sorted) == len(answer_blocks_sorted) and all(
                 len(q_block["nums"]) == len(a_block["nums"])
@@ -117,14 +203,12 @@ def extract_answer_key(pdf_path):
                     for question, answer in zip(q_block["nums"], a_block["nums"]):
                         page_answers[question] = str(answer)
 
-        # 🔥 CASE 2: Fallback (pure answers, no question numbers)
         if not page_answers:
             section_answers = []
 
             for block in sorted_blocks:
                 section_answers.extend(block["nums"])
 
-            # Map sequentially
             page_answers = {i + 1: str(ans) for i, ans in enumerate(section_answers)}
 
         if not page_answers:
