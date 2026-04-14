@@ -1,4 +1,5 @@
 import contextlib
+import re
 
 import cv2
 import torch
@@ -8,6 +9,7 @@ from PIL import Image
 
 MAX_NEW_TOKENS = 16
 NUM_BEAMS = 2
+NUMERIC_PATTERN = re.compile(r"-?(?:\d+(?:\.\d*)?|\.\d+)")
 
 
 def _to_pil_images(images):
@@ -36,6 +38,36 @@ def _generate_outputs(pil_images, model, processor, device):
                 return_dict_in_generate=True,
                 output_scores=True,
             )
+
+
+def normalize_numeric_text(text):
+    text = str(text).strip()
+    if not text:
+        return "?"
+
+    # Treat commas as decimal separators before filtering OCR noise.
+    text = text.replace(",", ".")
+    text = re.sub(r"\s+", "", text)
+    match = NUMERIC_PATTERN.search(text)
+    if not match:
+        return "?"
+
+    value = match.group(0)
+
+    # Collapse repeated decimal points that can appear in noisy OCR output.
+    if value.count(".") > 1:
+        sign = "-" if value.startswith("-") else ""
+        body = value[1:] if sign else value
+        first_dot = body.find(".")
+        body = body[: first_dot + 1] + body[first_dot + 1 :].replace(".", "")
+        value = sign + body
+
+    if value.startswith("."):
+        value = f"0{value}"
+    elif value.startswith("-."):
+        value = value.replace("-.", "-0.", 1)
+
+    return value if any(ch.isdigit() for ch in value) else "?"
 
 
 def recognize_numbers(images, model, processor, device):
@@ -97,13 +129,12 @@ def recognize_numbers(images, model, processor, device):
 
     results = []
     for raw_prediction, confidence in zip(raw_predictions, confidences):
-        digits = "".join(ch for ch in raw_prediction if ch.isdigit())
-        if not digits:
-            digits = "?"
+        prediction = normalize_numeric_text(raw_prediction)
+        if prediction == "?":
             confidence = 0.0
 
-        print(f"[OCR] Digits: '{digits}' Confidence: {confidence:.2%}")
-        results.append((digits, float(confidence)))
+        print(f"[OCR] Text: '{prediction}' Confidence: {confidence:.2%}")
+        results.append((prediction, float(confidence)))
 
     return results
 

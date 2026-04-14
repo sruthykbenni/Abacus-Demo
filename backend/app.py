@@ -9,7 +9,7 @@ from flask import Flask, request, send_from_directory, url_for
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-from recognize_number import recognize_number, recognize_numbers
+from recognize_number import normalize_numeric_text, recognize_number, recognize_numbers
 
 
 # ---------------- CONFIG ----------------
@@ -102,8 +102,8 @@ def load_answer_key(pdf_path):
 
 
 def build_remark(predicted, confidence, correct_answer):
-    predicted = str(predicted).strip()
-    correct_answer = str(correct_answer).strip()
+    predicted = normalize_numeric_text(predicted)
+    correct_answer = normalize_numeric_text(correct_answer)
 
     # ❌ Missing / unreadable digits
     if "?" in predicted or predicted == "":
