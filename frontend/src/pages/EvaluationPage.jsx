@@ -18,7 +18,7 @@ export default function EvaluationPage() {
 
   const [filterText, setFilterText] = useState("");
   const [sortOrder, setSortOrder] = useState("asc");
-  const [remarkFilter, setRemarkFilter] = useState("all");
+  const [remarkFilter, setRemarkFilter] = useState("Unable to read");
 
   if (!results.length) {
     return <div className="p-10">No data found</div>;
@@ -143,7 +143,7 @@ export default function EvaluationPage() {
             <option value="all">All</option>
             <option value="Correct">Correct</option>
             <option value="Wrong">Wrong</option>
-            <option value="Unable to read">Unable</option>
+            <option value="Unable to read">Unable to read</option>
             <option value="Manually corrected">Manually Corrected</option>
           </select>
         </div>
