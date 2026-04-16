@@ -8,6 +8,15 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+# =============================
+# DEBUG CONFIGURATION
+# =============================
+
+DEBUG_MODE = False
+def debug_save(path, image):
+    if DEBUG_MODE:
+        cv2.imwrite(str(path), image)
+
 
 BASE_DIR = Path(__file__).resolve().parent
 INPUT_DIR = BASE_DIR / "input"
@@ -1153,11 +1162,11 @@ def process_image(image_path, csv_rows, global_state):
     dbg_dir = DEBUG_DIR / image_path.stem
     dbg_dir.mkdir(parents=True, exist_ok=True)
     if DESKEW:
-        cv2.imwrite(str(dbg_dir / "deskew.png"), img)
+        debug_save(dbg_dir / "deskew.png", img)
 
     if layout == "row":
         debug = _crop_row_layout(img, image_path, row_candidate, csv_rows, global_state)
-        cv2.imwrite(str(dbg_dir / "cells_row.png"), debug)
+        debug_save(dbg_dir / "cells_row.png", debug)
         print(
             f"Done: {image_path.name} -> layout=row "
             f"({len(row_candidate.bands)} rows x {row_candidate.num_cols} cols, "
@@ -1167,7 +1176,7 @@ def process_image(image_path, csv_rows, global_state):
         return
 
     debug = _crop_col_layout(img, image_path, col_candidate, csv_rows, global_state)
-    cv2.imwrite(str(dbg_dir / "cells_col.png"), debug)
+    debug_save(dbg_dir / "cells_col.png", debug)
     print(
         f"Done: {image_path.name} -> layout=col "
         f"({len(col_candidate.row_bands)} rows x {len(col_candidate.answer_bands)} cols, "
