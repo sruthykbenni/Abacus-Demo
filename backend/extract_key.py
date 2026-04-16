@@ -5,6 +5,7 @@ import fitz
 
 QUESTION_NUMBER_LIMIT = 200
 ROW_TOLERANCE = 2.0
+ROW_CLUSTER_TOLERANCE = 8.0
 NUMERIC_TOKEN_RE = re.compile(r"-?(?:\d+(?:[.,]\d+)?|\.\d+)")
 
 
@@ -131,6 +132,27 @@ def extract_question_blocks(blocks):
             best_blocks = block_set
             best_coverage = coverage
 
+    if best_blocks:
+        covered = {num for block in best_blocks for num in block["question_nums"]}
+        next_expected = max(covered)
+        singleton_candidates = sorted(
+            (
+                block
+                for block in candidate_blocks
+                if len(block["question_nums"]) == 1 and block not in best_blocks
+            ),
+            key=lambda block: block["question_nums"][0],
+        )
+
+        for block in singleton_candidates:
+            value = block["question_nums"][0]
+            if value in covered:
+                continue
+            if value == next_expected + 1:
+                best_blocks.append(block)
+                covered.add(value)
+                next_expected = value
+
     return best_blocks
 
 
@@ -138,9 +160,33 @@ def row_key(y0):
     return round(y0 / ROW_TOLERANCE) * ROW_TOLERANCE
 
 
+def cluster_blocks_by_y(blocks, tolerance):
+    if not blocks:
+        return []
+
+    clusters = [[block] for block in sorted(blocks, key=lambda b: b["y0"])]
+    merged = [clusters[0]]
+
+    for cluster in clusters[1:]:
+        current = cluster[0]
+        prev_group = merged[-1]
+        prev_y = sum(block["y0"] for block in prev_group) / len(prev_group)
+        if abs(current["y0"] - prev_y) <= tolerance:
+            prev_group.extend(cluster)
+        else:
+            merged.append(cluster)
+
+    return merged
+
+
 def detect_layout(blocks, question_blocks):
     if question_blocks and looks_like_question_blocks(question_blocks):
-        if max(len(block["question_nums"]) for block in question_blocks) <= 3:
+        steps = [
+            block["question_nums"][1] - block["question_nums"][0]
+            for block in question_blocks
+            if len(block["question_nums"]) >= 2
+        ]
+        if steps and round(sum(steps) / len(steps)) > 1:
             return "vertical"
         return "horizontal"
 
@@ -163,26 +209,31 @@ def sort_blocks(blocks, layout):
 
 
 def map_vertical_question_answer_blocks(question_blocks, answer_blocks):
-    questions_by_row = {}
-    answers_by_row = {}
-
-    for block in question_blocks:
-        questions_by_row.setdefault(row_key(block["y0"]), []).append(block)
-
-    for block in answer_blocks:
-        answers_by_row.setdefault(row_key(block["y0"]), []).append(block)
+    question_rows = cluster_blocks_by_y(question_blocks, ROW_CLUSTER_TOLERANCE)
+    if not question_rows:
+        return {}
 
     page_answers = {}
+    min_question_y = min(block["y0"] for block in question_blocks) - ROW_CLUSTER_TOLERANCE
+    max_question_y = max(block["y0"] for block in question_blocks) + ROW_CLUSTER_TOLERANCE
+    answer_rows = cluster_blocks_by_y(
+        [
+            block
+            for block in answer_blocks
+            if min_question_y <= block["y0"] <= max_question_y
+        ],
+        ROW_CLUSTER_TOLERANCE,
+    )
 
-    for y in sorted(set(questions_by_row) & set(answers_by_row)):
+    for question_row, answer_row in zip(question_rows, answer_rows):
         q_nums = []
-        for block in sorted(questions_by_row[y], key=lambda b: b["x0"]):
+        for block in sorted(question_row, key=lambda b: b["x0"]):
             q_nums.extend(block["question_nums"])
 
         q_nums = sorted(q_nums)
 
         a_vals = []
-        for block in sorted(answers_by_row[y], key=lambda b: b["x0"]):
+        for block in sorted(answer_row, key=lambda b: b["x0"]):
             a_vals.extend(block["values"])
 
         if len(q_nums) != len(a_vals):
