@@ -211,6 +211,12 @@ export default function EvaluationPage() {
                     >
                       Save
                     </button>
+                    <button
+                      onClick={() => setEditingIndex(null)}
+                      className="bg-gray-600 text-white px-2 rounded"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 ) : (
                   <p>
