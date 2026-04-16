@@ -25,12 +25,14 @@ export default function EvaluationPage() {
   }
 
   // ================= EDIT FUNCTION =================
-  const handleEdit = (index, currentValue) => {
+  const handleEdit = (item, currentValue) => {
+    const index = results.findIndex(r => r.question === item.question);
     setEditingIndex(index);
     setEditValue(currentValue);
   };
 
-  const handleSaveEdit = (index) => {
+  const handleSaveEdit = (item) => {
+    const index = results.findIndex(r => r.question === item.question);
     const updated = [...results];
 
     const correct = updated[index].correct_answer;
@@ -198,7 +200,7 @@ export default function EvaluationPage() {
                 </h2>
 
                 {/* EDITABLE FIELD */}
-                {editingIndex === index ? (
+                {editingIndex !== null && results[editingIndex]?.question === item.question ? (
                   <div className="flex gap-2 mb-2">
                     <input
                       value={editValue}
@@ -206,7 +208,7 @@ export default function EvaluationPage() {
                       className="border px-2 py-1 rounded"
                     />
                     <button
-                      onClick={() => handleSaveEdit(index)}
+                      onClick={() => handleSaveEdit(item)}
                       className="bg-orange-600 text-white px-2 rounded"
                     >
                       Save
@@ -224,7 +226,7 @@ export default function EvaluationPage() {
                     {item.detected_answer}
                     <button
                       onClick={() =>
-                        handleEdit(index, item.detected_answer)
+                        handleEdit(item, item.detected_answer)
                       }
                       className="ml-3 bg-gray-800 text-white px-2 py-1 text-sm rounded"
                     >
