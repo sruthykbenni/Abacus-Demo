@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { Edit, User } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Navbar from "../components/Navbar";
 
 export default function ReportPage() {
@@ -9,24 +9,34 @@ export default function ReportPage() {
 
   const [showProfile, setShowProfile] = useState(false);
 
-  // 🔌 Replace with API later
-  const student = {
-    name: "Rahul",
-    contact: "9876543210",
-    level: "Advanced Level 1",
-    center: "Kochi Center"
-  };
+  // ✅ Load student profile from DB
+  const [student, setStudent] = useState({
+    name: "",
+    contact: "",
+    level: "",
+    center: "",
+  });
 
-  const exams = [
-    {
-      examId: "EX101",
-      date: "2026-04-05",
-      submissionId: "SUB1",
-      total: 60,
-      mark: 55,
-      accuracy: 91
-    }
-  ];
+  // ✅ Load submissions from DB
+  const [exams, setExams] = useState([]);
+
+  useEffect(() => {
+    // Fetch student profile
+    fetch(`http://127.0.0.1:5000/students/${studentId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) setStudent(data);
+      })
+      .catch((err) => console.error("Failed to load student:", err));
+
+    // Fetch all submissions for this student
+    fetch(`http://127.0.0.1:5000/students/${studentId}/submissions`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setExams(data);
+      })
+      .catch((err) => console.error("Failed to load submissions:", err));
+  }, [studentId]);
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -38,7 +48,7 @@ export default function ReportPage() {
         {/* HEADER */}
         <div className="flex items-center gap-3 mb-6">
           <h2 className="text-2xl font-bold">
-            Student {studentId} Reports
+            {student.name || `Student ${studentId}`}'s Reports
           </h2>
 
           {/* PROFILE ICON */}
@@ -68,30 +78,38 @@ export default function ReportPage() {
             </thead>
 
             <tbody>
-              {exams.map((e, i) => (
-                <tr
-                  key={i}
-                  className="border-t text-center hover:bg-gray-50"
-                >
-                  <td className="p-4 border-r">{e.examId}</td>
-                  <td className="border-r">{e.date}</td>
-                  <td className="border-r">{e.submissionId}</td>
-                  <td className="border-r">{e.total}</td>
-                  <td className="border-r">{e.mark}</td>
-                  <td className="border-r">{e.accuracy}%</td>
-
-                  <td>
-                    <button
-                      onClick={() =>
-                        navigate(`/evaluation/${e.submissionId}`)
-                      }
-                      className="bg-orange-100 p-2 rounded"
-                    >
-                      <Edit className="text-orange-600" />
-                    </button>
+              {exams.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-6 text-center text-gray-400">
+                    No submissions found
                   </td>
                 </tr>
-              ))}
+              ) : (
+                exams.map((e, i) => (
+                  <tr
+                    key={i}
+                    className="border-t text-center hover:bg-gray-50"
+                  >
+                    <td className="p-4 border-r">{e.exam_id}</td>
+                    <td className="border-r">{e.date}</td>
+                    <td className="border-r">{e.submission_id}</td>
+                    <td className="border-r">{e.total_questions}</td>
+                    <td className="border-r">{e.total_correct}</td>
+                    <td className="border-r">{e.accuracy}%</td>
+
+                    <td>
+                      <button
+                        onClick={() =>
+                          navigate(`/evaluation/${e.submission_id}`)
+                        }
+                        className="bg-orange-100 p-2 rounded"
+                      >
+                        <Edit className="text-orange-600" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
 
           </table>

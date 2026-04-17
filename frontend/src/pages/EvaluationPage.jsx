@@ -1,24 +1,43 @@
-import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 export default function EvaluationPage() {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const location   = useLocation();
+  const navigate   = useNavigate();
+  const { submissionId } = useParams();
 
   const [results, setResults] = useState(
     location.state?.results || []
   );
 
-  const [summary] = useState(
+  const [summary, setSummary] = useState(
     location.state?.summary || null
   );
 
-  const [editingIndex, setEditingIndex] = useState(null);
-  const [editValue, setEditValue] = useState("");
+  // ✅ Track which questions were manually corrected this session
+  const [pendingCorrections, setPendingCorrections] = useState({});
 
-  const [filterText, setFilterText] = useState("");
-  const [sortOrder, setSortOrder] = useState("asc");
-  const [remarkFilter, setRemarkFilter] = useState("Unable to read");
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editValue,    setEditValue]    = useState("");
+
+  const [filterText,    setFilterText]    = useState("");
+  const [sortOrder,     setSortOrder]     = useState("asc");
+  const [remarkFilter,  setRemarkFilter]  = useState("Unable to read");
+
+  // ✅ If navigated from report page (no state), load from DB
+  useEffect(() => {
+    if (!location.state?.results && submissionId && submissionId !== "temp") {
+      fetch(`http://127.0.0.1:5000/submissions/${submissionId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.results) {
+            setResults(data.results);
+            setSummary(data.summary);
+          }
+        })
+        .catch((err) => console.error("Failed to load submission:", err));
+    }
+  }, [submissionId]);
 
   if (!results.length) {
     return <div className="p-10">No data found</div>;
@@ -49,6 +68,16 @@ export default function EvaluationPage() {
     // 🔥 Mark as manually corrected
     updated[index].confidence = "Manually corrected";
 
+    // ✅ Track this correction for bulk save
+    setPendingCorrections((prev) => ({
+      ...prev,
+      [item.question]: {
+        question:        item.question,
+        detected_answer: editValue,
+        remark:          editValue === correct ? "Correct" : "Wrong",
+      },
+    }));
+
     setResults(updated);
     setEditingIndex(null);
   };
@@ -59,7 +88,11 @@ export default function EvaluationPage() {
   );
 
   if (remarkFilter !== "all") {
-    displayed = displayed.filter((i) => i.remark === remarkFilter);
+    if (remarkFilter === "Manually corrected") {
+      displayed = displayed.filter((i) => i.confidence?.toLowerCase() === "manually corrected");
+    } else {
+      displayed = displayed.filter((i) => i.remark === remarkFilter);
+    }
   }
 
   displayed = displayed.sort((a, b) =>
@@ -89,6 +122,52 @@ export default function EvaluationPage() {
     link.href = encodeURI(csvContent);
     link.download = "evaluation_report.csv";
     link.click();
+  };
+
+  // ✅ Save all manual corrections to DB
+  const handleSaveAll = async () => {
+    const corrections = Object.values(pendingCorrections);
+
+    if (!corrections.length) {
+      alert("No corrections to save");
+      return;
+    }
+
+    if (submissionId === "temp") {
+      alert("Changes saved locally (no submission ID — DB not updated)");
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:5000/submissions/${submissionId}/results`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ corrections }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (data.error) {
+        alert("Save failed: " + data.error);
+        return;
+      }
+
+      // Update summary with recalculated values from backend
+      setSummary({
+        total_questions: data.total_questions,
+        total_correct:   data.total_correct,
+        accuracy:        data.accuracy,
+      });
+
+      setPendingCorrections({});
+      alert("Changes saved successfully");
+    } catch (err) {
+      console.error(err);
+      alert("Save failed");
+    }
   };
 
   return (
@@ -270,7 +349,7 @@ export default function EvaluationPage() {
         {/* SAVE ALL */}
         <div className="mt-8 flex justify-center">
           <button
-            onClick={() => alert("Changes saved")}
+            onClick={handleSaveAll}
             className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-lg font-semibold"
           >
             Save All Changes

@@ -8,6 +8,8 @@ export default function UploadPage() {
 
   const [answerSheet, setAnswerSheet] = useState(null);
   const [answerKey, setAnswerKey] = useState(null);
+  // ✅ NEW: Question Paper Code field
+  const [examId, setExamId] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleDrop = (e, type) => {
@@ -24,6 +26,11 @@ export default function UploadPage() {
       return;
     }
 
+    if (!examId.trim()) {
+      alert("Please enter the Question Paper Code");
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -33,6 +40,10 @@ export default function UploadPage() {
       if (answerKey) {
         formData.append("answer_key", answerKey);
       }
+
+      // ✅ Send student_id and exam_id to backend
+      formData.append("student_id", studentId);
+      formData.append("exam_id", examId.trim());
 
       const res = await fetch("http://127.0.0.1:5000/process", {
         method: "POST",
@@ -46,8 +57,10 @@ export default function UploadPage() {
         return;
       }
 
-      // ✅ DIRECT NAVIGATION TO EVALUATION PAGE
-      navigate(`/evaluation/temp`, {
+      // ✅ Use real submission_id from DB if available, else fall back to "temp"
+      const submissionId = data.submission_id ?? "temp";
+
+      navigate(`/evaluation/${submissionId}`, {
         state: {
           results: data.results,
           summary: {
@@ -78,6 +91,20 @@ export default function UploadPage() {
           <h2 className="text-2xl font-bold mb-8 text-center">
             Upload Answer Sheet
           </h2>
+
+          {/* ✅ NEW: Question Paper Code input */}
+          <div className="mb-6">
+            <label className="block font-semibold mb-2 text-gray-700">
+              Question Paper Code
+            </label>
+            <input
+              type="text"
+              value={examId}
+              onChange={(e) => setExamId(e.target.value)}
+              placeholder="e.g. 417, L5_839"
+              className="w-full border-2 border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:border-orange-400"
+            />
+          </div>
 
           <div className="grid md:grid-cols-2 gap-6 mb-8">
 

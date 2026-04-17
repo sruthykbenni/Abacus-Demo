@@ -8,12 +8,18 @@ export default function SessionPage() {
   const [students, setStudents] = useState([]);
 
   useEffect(() => {
-    // Replace with API later
-    setStudents([
-      { id: 101, name: "Rahul" },
-      { id: 102, name: "Anjali" },
-      { id: 103, name: "Kiran" }
-    ]);
+    // ✅ Load students from DB
+    fetch("http://127.0.0.1:5000/students")
+      .then((r) => r.json())
+      .then((data) => setStudents(data))
+      .catch(() => {
+        // Fallback to hardcoded list if backend is unreachable
+        setStudents([
+          { id: 101, name: "Rahul" },
+          { id: 102, name: "Anjali" },
+          { id: 103, name: "Kiran" },
+        ]);
+      });
   }, []);
 
   return (
