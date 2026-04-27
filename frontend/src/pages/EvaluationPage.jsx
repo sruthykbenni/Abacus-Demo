@@ -22,21 +22,39 @@ export default function EvaluationPage() {
 
   const [filterText,    setFilterText]    = useState("");
   const [sortOrder,     setSortOrder]     = useState("asc");
-  const [remarkFilter,  setRemarkFilter]  = useState("Unable to read");
+  const [remarkFilter,  setRemarkFilter]  = useState("all");
+  const [loadingLatest, setLoadingLatest] = useState(false);
 
-  // ✅ If navigated from report page (no state), load from DB
+  const getDisplayedConfidence = (item) =>
+    item.is_corrected ? "Manually corrected" : item.confidence;
+
+  const loadSubmission = () => {
+    if (!submissionId || submissionId === "temp") return;
+
+    setLoadingLatest(true);
+    fetch(`http://127.0.0.1:5000/submissions/${submissionId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.results) {
+          setResults(data.results);
+          setSummary(data.summary);
+        }
+      })
+      .catch((err) => console.error("Failed to load submission:", err))
+      .finally(() => setLoadingLatest(false));
+  };
+
+  // Refresh from DB so late answer-key uploads are reflected on reopen.
   useEffect(() => {
-    if (!location.state?.results && submissionId && submissionId !== "temp") {
-      fetch(`http://127.0.0.1:5000/submissions/${submissionId}`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.results) {
-            setResults(data.results);
-            setSummary(data.summary);
-          }
-        })
-        .catch((err) => console.error("Failed to load submission:", err));
-    }
+    loadSubmission();
+  }, [submissionId]);
+
+  useEffect(() => {
+    if (!submissionId || submissionId === "temp") return;
+
+    const handleFocus = () => loadSubmission();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, [submissionId]);
 
   if (!results.length) {
@@ -47,7 +65,7 @@ export default function EvaluationPage() {
   const handleEdit = (item, currentValue) => {
     const index = results.findIndex(r => r.question === item.question);
     setEditingIndex(index);
-    setEditValue(currentValue);
+    setEditValue(item.manual_corrected_answer || currentValue);
   };
 
   const handleSaveEdit = (item) => {
@@ -56,7 +74,8 @@ export default function EvaluationPage() {
 
     const correct = updated[index].correct_answer;
 
-    updated[index].detected_answer = editValue;
+    updated[index].manual_corrected_answer = editValue;
+    updated[index].is_corrected = 1;
 
     // 🔥 Recalculate remark
     if (editValue === correct) {
@@ -66,15 +85,12 @@ export default function EvaluationPage() {
     }
 
     // 🔥 Mark as manually corrected
-    updated[index].confidence = "Manually corrected";
-
     // ✅ Track this correction for bulk save
     setPendingCorrections((prev) => ({
       ...prev,
       [item.question]: {
-        question:        item.question,
-        detected_answer: editValue,
-        remark:          editValue === correct ? "Correct" : "Wrong",
+        question:                item.question,
+        manual_corrected_answer: editValue,
       },
     }));
 
@@ -89,7 +105,7 @@ export default function EvaluationPage() {
 
   if (remarkFilter !== "all") {
     if (remarkFilter === "Manually corrected") {
-      displayed = displayed.filter((i) => i.confidence?.toLowerCase() === "manually corrected");
+      displayed = displayed.filter((i) => i.is_corrected);
     } else {
       displayed = displayed.filter((i) => i.remark === remarkFilter);
     }
@@ -107,10 +123,12 @@ export default function EvaluationPage() {
       ["Question", "Detected", "Correct", "Remark", "Confidence"],
       ...results.map((r) => [
         r.question,
-        r.detected_answer,
+        r.is_corrected && r.manual_corrected_answer
+          ? r.manual_corrected_answer
+          : r.detected_answer,
         r.correct_answer,
         r.remark,
-        r.confidence,
+        getDisplayedConfidence(r),
       ]),
     ];
 
@@ -182,6 +200,15 @@ export default function EvaluationPage() {
           </h1>
 
           <div className="flex gap-3">
+            {submissionId !== "temp" && (
+              <button
+                onClick={loadSubmission}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+              >
+                {loadingLatest ? "Refreshing..." : "Refresh Latest"}
+              </button>
+            )}
+
             <button
               onClick={handleDownload}
               className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg"
@@ -302,7 +329,9 @@ export default function EvaluationPage() {
                 ) : (
                   <p>
                     <strong>Detected Answer:</strong>{" "}
-                    {item.detected_answer}
+                    {item.is_corrected && item.manual_corrected_answer
+                      ? item.manual_corrected_answer
+                      : item.detected_answer}
                     <button
                       onClick={() =>
                         handleEdit(item, item.detected_answer)
@@ -336,7 +365,7 @@ export default function EvaluationPage() {
 
                 <p>
                   <strong>Confidence:</strong>{" "}
-                  {item.confidence}
+                  {getDisplayedConfidence(item)}
                 </p>
 
               </div>

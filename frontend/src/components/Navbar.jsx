@@ -1,8 +1,20 @@
-import { GraduationCap } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { GraduationCap, LogOut, KeyRound } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 export default function Navbar() {
   const location = useLocation();
+  const navigate  = useNavigate();
+
+  const role     = sessionStorage.getItem("role");
+  const username = sessionStorage.getItem("username");
+
+  const handleLogout = () => {
+    sessionStorage.clear();
+    navigate("/login");
+  };
+
+  const isHome    = location.pathname === "/";
+  const isLogin   = location.pathname === "/login";
 
   return (
     <div className="bg-white shadow-md px-8 py-4 flex justify-between items-center">
@@ -13,17 +25,45 @@ export default function Navbar() {
       </div>
 
       <div className="flex items-center gap-4">
-        {location.pathname !== "/" && (
+        {!isLogin && !isHome && (
           <Link
             to="/"
             className="text-blue-600 hover:text-blue-800 underline text-sm"
           >
-            Return to Main Page
+            Main Page
           </Link>
         )}
-        <div className="text-sm text-gray-500">
-          Admin Panel
-        </div>
+
+        {/* Answer Key Manager link (admin/teacher only) */}
+        {!isLogin && (role === "admin" || role === "teacher") && (
+          <Link
+            to="/answer-keys"
+            className="flex items-center gap-1 text-sm text-orange-600 hover:text-orange-800 font-medium"
+          >
+            <KeyRound size={15} />
+            Answer Keys
+          </Link>
+        )}
+
+        {username && !isLogin && (
+          <span className="text-sm text-gray-500 capitalize">
+            {role === "student" ? "👨‍🎓" : role === "teacher" ? "👨‍🏫" : "⚙️"} {username}
+          </span>
+        )}
+
+        {!isLogin && username && (
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700"
+          >
+            <LogOut size={15} />
+            Logout
+          </button>
+        )}
+
+        {isLogin && (
+          <div className="text-sm text-gray-500">Sign in to continue</div>
+        )}
       </div>
 
     </div>

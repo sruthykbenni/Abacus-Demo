@@ -1,47 +1,61 @@
 -- ============================================================
--- Abacus Evaluation System — PostgreSQL Schema
+-- Abacus Evaluation System — SQLite Schema
 -- ============================================================
 
--- 1. Students
-CREATE TABLE IF NOT EXISTS students (
-    id          SERIAL PRIMARY KEY,
-    name        VARCHAR(100) NOT NULL,
-    contact     VARCHAR(20),
-    level       VARCHAR(100),
-    center      VARCHAR(100),
-    created_at  TIMESTAMP DEFAULT NOW()
+-- 1. Users (auth)
+CREATE TABLE IF NOT EXISTS users (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    username    TEXT UNIQUE NOT NULL,
+    password    TEXT NOT NULL,
+    role        TEXT NOT NULL CHECK (role IN ('student', 'teacher', 'admin')),
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Submissions  (one per upload attempt)
+-- 2. Students (linked to users)
+CREATE TABLE IF NOT EXISTS students (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    name        TEXT NOT NULL,
+    contact     TEXT,
+    level       TEXT,
+    center      TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. Answer Keys (stored per exam_id by admin/teacher)
+CREATE TABLE IF NOT EXISTS answer_keys (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    exam_id         TEXT UNIQUE NOT NULL,
+    file_path       TEXT,
+    key_data        TEXT NOT NULL,
+    uploaded_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. Submissions (one per upload attempt)
 CREATE TABLE IF NOT EXISTS submissions (
-    id           SERIAL PRIMARY KEY,
-    student_id   INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-    exam_id      VARCHAR(50) NOT NULL,          -- Question Paper Code entered on Upload page
-    submitted_at TIMESTAMP DEFAULT NOW(),
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id      INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    exam_id         TEXT NOT NULL,
+    file_path       TEXT,
+    submitted_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     total_questions INTEGER DEFAULT 0,
     total_correct   INTEGER DEFAULT 0,
-    accuracy        NUMERIC(5,2) DEFAULT 0
+    accuracy        REAL DEFAULT 0
 );
 
--- 3. Results  (one row per question per submission)
+-- 5. Results (one row per question per submission)
 CREATE TABLE IF NOT EXISTS results (
-    id                SERIAL PRIMARY KEY,
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     submission_id     INTEGER NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
     question_number   INTEGER NOT NULL,
     image_url         TEXT,
     correct_answer    TEXT,
     detected_answer   TEXT,
-    remark            VARCHAR(50),
-    confidence        TEXT,                     -- stored as text to hold "Manually corrected" or numeric
-    is_corrected      BOOLEAN DEFAULT FALSE,
-    updated_at        TIMESTAMP DEFAULT NOW()
+    manual_corrected_answer TEXT,
+    remark            TEXT,
+    confidence        TEXT,
+    is_corrected      INTEGER DEFAULT 0,
+    updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- ============================================================
--- Seed data — sample students
--- ============================================================
-INSERT INTO students (name, contact, level, center) VALUES
-  ('Rahul',  '9876543210', 'Advanced Level 1', 'Kochi Center'),
-  ('Anjali', '9876543211', 'Intermediate',      'Kochi Center'),
-  ('Kiran',  '9876543212', 'Beginner',          'Thrissur Center')
-ON CONFLICT DO NOTHING;
